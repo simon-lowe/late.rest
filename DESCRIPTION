@@ -1,13 +1,13 @@
 Package: late.rest
 Type: Package
-Title: What the Package Does (Title Case)
-Version: 0.1.0
-Author: Who wrote it
-Maintainer: The package maintainer <yourself@somewhere.net>
-Description: More about what it does (maybe more than one line)
-    Use four spaces when indenting paragraphs within the Description.
-License: What license is it under?
+Title: Improving LATE estimation by a Test-and-Select procedure
+Version: 0.0.1
+Author: Simon Lowe
+Maintainer: Simon Lowe <loewe.sim@gmail.com>
+Description: Implements the Test-and-Select procedure detailed in Hazard and Lowe (2023).
+License: MIT + file LICENSE
 Encoding: UTF-8
 LazyData: true
 URL: https://github.com/simon-lowe/late.rest
 BugReports: https://github.com/simon-lowe/late.rest/issues
+RoxygenNote: 7.2.3
