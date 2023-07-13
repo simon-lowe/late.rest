@@ -15,26 +15,39 @@ run.late.rest(
 )
 }
 \arguments{
-\item{data}{data.frame}
+\item{data}{A data.frame containing the necessary variables to run the model.}
 
-\item{yname}{dependent variable name}
+\item{yname}{Name of the dependent variable}
 
-\item{treat}{bla}
+\item{treat}{Name of the treatment variable}
 
-\item{instrument}{blu}
+\item{instrument}{Name of the instrument}
 
-\item{controls}{shu}
+\item{controls}{Controls. Either as a formula, eg ~ x1 + x2, or a vector of strings, eg c("x1", "x2")}
 
-\item{n_folds}{sha}
+\item{n_folds}{Number of folds}
 
 \item{p_th}{Group selection threshold}
 }
 \value{
-tada
+fixest object
 }
 \description{
 Main function
 }
 \examples{
-# You can do the following hihi
+# Loading packages
+library(fixest)
+
+# Generate a simulated dataset
+data <- sim.data()
+
+# Run a standard IV
+reg1 <- feols(data = data, y ~ 1 | d ~ z)
+
+# Run the test-and-select method
+reg2 <- run.late.rest(data = data, yname = "y", treat = "d", instrument = "z", controls = ~g)
+
+# Comparing both regressions
+etable(reg1, reg2)
 }
