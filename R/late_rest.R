@@ -54,6 +54,10 @@ run.late.rest <- function(data, yname, treat, instrument, controls, n_folds = 2,
   # Creating variables for the R check
   g = p_val = res = split_x = val = NULL
 
+  # # Create data
+  # data <- dat_reg
+  # setnames(dat_reg, c(yname, treat, instrument), c("y", "d", "z"))
+
   # Create the group variable
   data[, g := .GRP, by = mget(c_vars)]
 
@@ -63,8 +67,12 @@ run.late.rest <- function(data, yname, treat, instrument, controls, n_folds = 2,
   # return(c(min(data[, .(n = .N), by = g]$n), data[, .(n = .N), by = split_x]$n))
 
   # Compute the cross-fitted compliance rates
+
+  f1 <- formula(paste0(treat, " ~ ", instrument))
+
   tmp <- data[, lapply(1:n_folds, function(x) {
-    bla <- lmtest::coeftest(lm(d ~ z, subset = split_x != x), vcov = sandwich::vcovHC, type = "HC3")
+    # bla <- lmtest::coeftest(lm(d ~ z, subset = split_x != x), vcov = sandwich::vcovHC, type = "HC3")
+    bla <- lmtest::coeftest(lm(data = .SD, formula = f1, subset = split_x != x), vcov = sandwich::vcovHC, type = "HC3")
     list(bla[2,1], bla[2, 4])
   }), keyby = g]
   tmp[, res := rep(c("pc", "p_val"), .N/2)]
@@ -76,5 +84,9 @@ run.late.rest <- function(data, yname, treat, instrument, controls, n_folds = 2,
 
   dat_reg <- data.table::merge.data.table(data, tmp, by = c("g", "split_x"))
 
-  reg <- fixest::feols(data = dat_reg[p_val <= p_th], y ~ 1 | d ~ z)
+  f2 <- formula(paste0(yname, " ~ 1 | ", treat, " ~ ", instrument))
+
+  reg <- fixest::feols(data = dat_reg[p_val <= p_th], f2)
+
+  return(reg)
 }
