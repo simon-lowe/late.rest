@@ -31,11 +31,23 @@ devtools::install_github("simon-lowe/late.rest")
 
 ## Example
 
-This is a basic example which shows you how to solve a common problem:
+The example below shows basic use with simulated data:
 
 ```{r example}
 library(late.rest)
-## basic example code
+library(fixest)
+
+# Generate a simulated dataset
+data <- sim.data()
+
+# Run a standard IV
+reg1 <- feols(data = data, y ~ 1 | d ~ z)
+
+# Run the test-and-select method
+reg2 <- run.late.rest(data = data, yname = "y", treat = "d", instrument = "z", controls = ~g)
+
+# Comparing both regressions
+etable(reg1, reg2)
 ```
 
 
