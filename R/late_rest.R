@@ -14,6 +14,7 @@
 #' @param controls Controls. Either as a formula, eg ~ x1 + x2, or a vector of strings, eg c("x1", "x2")
 #' @param n_folds Number of folds
 #' @param p_th Group selection threshold
+#' @param joint_est Final estimation method
 #'
 #' @return fixest object
 #' @export
@@ -34,7 +35,10 @@
 #' # Comparing both regressions
 #' etable(reg1, reg2)
 
-run.late.rest <- function(data, yname, treat, instrument, controls, n_folds = 2, p_th = 0.05){
+run.late.rest <- function(data, yname,
+                          treat, instrument, controls,
+                          n_folds = 2, p_th = 0.05,
+                          joint_est = TRUE){
 
   # Convert data to data.table
   data.table::setDT(data)
@@ -99,23 +103,16 @@ run.late.rest <- function(data, yname, treat, instrument, controls, n_folds = 2,
 
   f2 <- formula(paste0(yname, " ~ 1 | ", treat, " ~ ", instrument))
 
-  reg <- fixest::feols(data = dat_reg[p_val <= p_th], f2)
-
-  return(reg)
+  if(joint_est == TRUE){
+    reg <- fixest::feols(data = dat_reg[p_val <= p_th], f2)
+    return(reg)
+  }
+  if(joint_est == FALSE){
+    coefficient <- NULL
+    reg <- fixest::feols(data = dat_reg[p_val <= p_th], f2, split = ~split_x)
+    return(setDT(coeftable(reg))[coefficient != "(Intercept)"])
+  }
 }
-
-
-# Sample size
-n <- 1e3
-
-# Number of groups
-J <- 10
-
-# Covariance matrix for d (latency to treat), e (Y0)
-rde <- 0.3
-sd <- 1
-se <- 1
-
 
 #' Simulate data
 #'
@@ -150,7 +147,7 @@ sim.data <- function(nsims = 1, beta = 1, alpha = 0.5,
                      zeta = 0, s_eta = 0.01){
 
   # Set seed
-  set.seed(12345)
+  # set.seed(12345)
 
   # Creating variables for the R check
   d0 = d1 = g = nt = at = pc_tmp = sim_id = x = y = y0 = y1 = z = NULL

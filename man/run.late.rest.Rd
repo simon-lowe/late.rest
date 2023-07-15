@@ -11,7 +11,8 @@ run.late.rest(
   instrument,
   controls,
   n_folds = 2,
-  p_th = 0.05
+  p_th = 0.05,
+  joint_est = TRUE
 )
 }
 \arguments{
@@ -28,6 +29,8 @@ run.late.rest(
 \item{n_folds}{Number of folds}
 
 \item{p_th}{Group selection threshold}
+
+\item{joint_est}{Final estimation method}
 }
 \value{
 fixest object
