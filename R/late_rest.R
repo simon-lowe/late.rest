@@ -15,6 +15,7 @@
 #' @param n_folds Number of folds
 #' @param p_th Group selection threshold
 #' @param joint_est Final estimation method
+#' @param csl_est CS method
 #'
 #' @return fixest object
 #' @export
@@ -38,7 +39,7 @@
 run.late.rest <- function(data, yname,
                           treat, instrument, controls,
                           n_folds = 2, p_th = 0.05,
-                          joint_est = TRUE){
+                          joint_est = TRUE, csl_est = FALSE){
 
   # Convert data to data.table
   data.table::setDT(data)
@@ -87,30 +88,64 @@ run.late.rest <- function(data, yname,
 
   f1 <- formula(paste0(treat, " ~ ", instrument))
 
-  tmp <- data[, lapply(1:n_folds, function(x) {
-    # bla <- lmtest::coeftest(lm(d ~ z, subset = split_x != x), vcov = sandwich::vcovHC, type = "HC3")
-    bla <- lmtest::coeftest(lm(data = .SD, formula = f1, subset = split_x != x), vcov = sandwich::vcovHC, type = "HC3")
-    list(bla[2,1], bla[2, 4])
-  }), keyby = g]
-  tmp[, res := rep(c("pc", "p_val"), .N/2)]
-  # tmp <- data.table::melt(tmp, measure = data.table:::patterns("V\\d+"), value.name = "val", variable.name = "split_x", variable.factor = F)
-  tmp <- data.table::melt(tmp, measure = grep("^V\\d+$", colnames(tmp), value = TRUE), value.name = "val", variable.name = "split_x", variable.factor = F)
-  tmp[, split_x := readr::parse_number(split_x)]
-  tmp[, val := unlist(val)]
-  tmp <- data.table::dcast(tmp, g + split_x ~ res, value.var = "val")
+  if(n_folds > 1){
+    # tmp <- data[, lapply(1:n_folds, function(x) {
+    #   bla <- lmtest::coeftest(lm(data = .SD[split_x != x], formula = f1), vcov = sandwich::vcovHC, type = "HC3")
+    #   list(bla[2,1], bla[2, 4])
+    # }), keyby = g]
+    # tmp[, res := rep(c("pc", "p_val"), .N/2)]
+    # # tmp <- data.table::melt(tmp, measure = data.table:::patterns("V\\d+"), value.name = "val", variable.name = "split_x", variable.factor = F)
+    # tmp <- data.table::melt(tmp, measure = grep("^V\\d+$", colnames(tmp), value = TRUE), value.name = "val", variable.name = "split_x", variable.factor = F)
+    # tmp[, split_x := readr::parse_number(split_x)]
+    # tmp[, val := unlist(val)]
+    # tmp <- data.table::dcast(tmp, g + split_x ~ res, value.var = "val")
 
-  dat_reg <- data.table::merge.data.table(data, tmp, by = c("g", "split_x"))
+    tmp <- data.table()
+    for(i in 1:n_folds){
+      tmp2 <- data[, as.list(lmtest::coeftest(lm(data = .SD[split_x != i], formula = f1), vcov = sandwich::vcovHC, type = "HC3")[2, c(1, 4)]), by = g]
+      names(tmp2)[2:3] <- c("pc", "p_val")
+      tmp2[, split_x := i]
+      tmp <- rbind(tmp, tmp2)
+    }
+
+    dat_reg <- data.table::merge.data.table(data, tmp, by = c("g", "split_x"))
+  }
+  if(n_folds == 1){
+    # tmp <- data[, lapply(1:n_folds, function(x) {
+    #   bla <- lmtest::coeftest(lm(data = .SD, formula = f1), vcov = sandwich::vcovHC, type = "HC3")
+    #   list(bla[2,1], bla[2, 4])
+    # }), keyby = g]
+    # tmp[, res := rep(c("pc", "p_val"), .N/2)]
+    # # tmp <- data.table::melt(tmp, measure = data.table:::patterns("V\\d+"), value.name = "val", variable.name = "split_x", variable.factor = F)
+    # tmp <- data.table::melt(tmp, measure = grep("^V\\d+$", colnames(tmp), value = TRUE), value.name = "val", variable.name = "split_x", variable.factor = F)
+    # tmp[, split_x := readr::parse_number(split_x)]
+    # tmp[, val := unlist(val)]
+    # tmp <- data.table::dcast(tmp, g + split_x ~ res, value.var = "val")
+
+    tmp <- data[, as.list(lmtest::coeftest(lm(data = .SD, formula = f1), vcov = sandwich::vcovHC, type = "HC3")[2, c(1, 4)]), by = g]
+    names(tmp)[2:3] <- c("pc", "p_val")
+    tmp[, split_x := 1]
+
+    dat_reg <- data.table::merge.data.table(data, tmp, by = c("g", "split_x"))
+  }
 
   f2 <- formula(paste0(yname, " ~ 1 | ", treat, " ~ ", instrument))
 
   if(joint_est == TRUE){
-    reg <- fixest::feols(data = dat_reg[p_val <= p_th], f2)
+    reg <- fixest::feols(data = dat_reg[p_val <= p_th], f2, vcov = "hetero")
     return(reg)
   }
-  if(joint_est == FALSE){
+  if(joint_est == FALSE & csl_est == FALSE){
     coefficient <- NULL
-    reg <- fixest::feols(data = dat_reg[p_val <= p_th], f2, split = ~split_x)
+    reg <- fixest::feols(data = dat_reg[p_val <= p_th], f2, split = ~split_x, vcov = "hetero")
     return(setDT(coeftable(reg))[coefficient != "(Intercept)"])
+  }
+  if(joint_est == FALSE & csl_est == TRUE){
+    z_dm <- NULL
+    dat_reg[, z_dm := get(instrument) - mean(get(instrument))]
+    f3 <- formula(paste0(yname, " ~ pc | ", treat, " ~ z_dm:pc"))
+    reg <- fixest::feols(data = dat_reg, f3, vcov = "hetero")
+    return(reg)
   }
 }
 
@@ -145,9 +180,6 @@ sim.data <- function(nsims = 1, beta = 1, alpha = 0.5,
                      rde = 0.3, sd = 1, se = 1,
                      s_at = 0.375, s_nt = 0.375,
                      zeta = 0, s_eta = 0.01){
-
-  # Set seed
-  # set.seed(12345)
 
   # Creating variables for the R check
   d0 = d1 = g = nt = at = pc_tmp = sim_id = x = y = y0 = y1 = z = NULL

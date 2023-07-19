@@ -12,7 +12,8 @@ run.late.rest(
   controls,
   n_folds = 2,
   p_th = 0.05,
-  joint_est = TRUE
+  joint_est = TRUE,
+  csl_est = FALSE
 )
 }
 \arguments{
@@ -31,6 +32,8 @@ run.late.rest(
 \item{p_th}{Group selection threshold}
 
 \item{joint_est}{Final estimation method}
+
+\item{csl_est}{CS method}
 }
 \value{
 fixest object
