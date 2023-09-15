@@ -72,34 +72,17 @@ run.late.rest <- function(data, yname,
   # Creating variables for the R check
   g = p_val = res = split_x = val = NULL
 
-  # # Create data
-  # data <- dat_reg
-  # setnames(dat_reg, c(yname, treat, instrument), c("y", "d", "z"))
-
   # Create the group variable
   data[, g := .GRP, by = mget(c_vars)]
 
   # Create the split
   data[, split_x := rand_n_list_group(.N, n_folds), by = g]
 
-  # return(c(min(data[, .(n = .N), by = g]$n), data[, .(n = .N), by = split_x]$n))
-
   # Compute the cross-fitted compliance rates
 
   f1 <- formula(paste0(treat, " ~ ", instrument))
 
   if(n_folds > 1){
-    # tmp <- data[, lapply(1:n_folds, function(x) {
-    #   bla <- lmtest::coeftest(lm(data = .SD[split_x != x], formula = f1), vcov = sandwich::vcovHC, type = "HC3")
-    #   list(bla[2,1], bla[2, 4])
-    # }), keyby = g]
-    # tmp[, res := rep(c("pc", "p_val"), .N/2)]
-    # # tmp <- data.table::melt(tmp, measure = data.table:::patterns("V\\d+"), value.name = "val", variable.name = "split_x", variable.factor = F)
-    # tmp <- data.table::melt(tmp, measure = grep("^V\\d+$", colnames(tmp), value = TRUE), value.name = "val", variable.name = "split_x", variable.factor = F)
-    # tmp[, split_x := readr::parse_number(split_x)]
-    # tmp[, val := unlist(val)]
-    # tmp <- data.table::dcast(tmp, g + split_x ~ res, value.var = "val")
-
     tmp <- data.table()
     for(i in 1:n_folds){
       tmp2 <- data[, as.list(lmtest::coeftest(lm(data = .SD[split_x != i], formula = f1), vcov = sandwich::vcovHC, type = "HC3")[2, c(1, 4)]), by = g]
@@ -111,17 +94,6 @@ run.late.rest <- function(data, yname,
     dat_reg <- data.table::merge.data.table(data, tmp, by = c("g", "split_x"))
   }
   if(n_folds == 1){
-    # tmp <- data[, lapply(1:n_folds, function(x) {
-    #   bla <- lmtest::coeftest(lm(data = .SD, formula = f1), vcov = sandwich::vcovHC, type = "HC3")
-    #   list(bla[2,1], bla[2, 4])
-    # }), keyby = g]
-    # tmp[, res := rep(c("pc", "p_val"), .N/2)]
-    # # tmp <- data.table::melt(tmp, measure = data.table:::patterns("V\\d+"), value.name = "val", variable.name = "split_x", variable.factor = F)
-    # tmp <- data.table::melt(tmp, measure = grep("^V\\d+$", colnames(tmp), value = TRUE), value.name = "val", variable.name = "split_x", variable.factor = F)
-    # tmp[, split_x := readr::parse_number(split_x)]
-    # tmp[, val := unlist(val)]
-    # tmp <- data.table::dcast(tmp, g + split_x ~ res, value.var = "val")
-
     tmp <- data[, as.list(lmtest::coeftest(lm(data = .SD, formula = f1), vcov = sandwich::vcovHC, type = "HC3")[2, c(1, 4)]), by = g]
     names(tmp)[2:3] <- c("pc", "p_val")
     tmp[, split_x := 1]
