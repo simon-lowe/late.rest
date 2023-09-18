@@ -13,6 +13,7 @@
 #' @param instrument Name of the instrument
 #' @param controls Controls. Either as a formula, eg ~ x1 + x2, or a vector of strings, eg c("x1", "x2")
 #' @param n_folds Number of folds
+#' @param one_sided_test Use of a one-sided t-test for selection.
 #' @param p_th Group selection threshold
 #' @param joint_est Final estimation method
 #' @param csl_est CS method
@@ -38,7 +39,7 @@
 
 run.late.rest <- function(data, yname,
                           treat, instrument, controls,
-                          n_folds = 2, p_th = 0.05,
+                          n_folds = 2, one_sided_test = TRUE, p_th = 0.05,
                           joint_est = TRUE, csl_est = FALSE){
 
   # Convert data to data.table
@@ -70,7 +71,7 @@ run.late.rest <- function(data, yname,
 
   # Code --------------------------------------------------------------------
   # Creating variables for the R check
-  g = p_val = res = split_x = val = NULL
+  g = p_val = t_val = res = split_x = val = NULL
 
   # Create the group variable
   data[, g := .GRP, by = mget(c_vars)]
@@ -85,17 +86,26 @@ run.late.rest <- function(data, yname,
   if(n_folds > 1){
     tmp <- data.table()
     for(i in 1:n_folds){
-      tmp2 <- data[, as.list(lmtest::coeftest(lm(data = .SD[split_x != i], formula = f1), vcov = sandwich::vcovHC, type = "HC3")[2, c(1, 4)]), by = g]
-      names(tmp2)[2:3] <- c("pc", "p_val")
+      # if(one_sided_test == FALSE){
+        # tmp2 <- data[, as.list(lmtest::coeftest(lm(data = .SD[split_x != i], formula = f1), vcov = sandwich::vcovHC, type = "HC3")[2, c(1, 4)]), by = g]
+        # names(tmp2)[2:3] <- c("pc", "p_val")
+      # }
+      # if(one_sided_test == TRUE){
+        tmp2 <- data[, as.list(lmtest::coeftest(lm(data = .SD[split_x != i], formula = f1), vcov = sandwich::vcovHC, type = "HC3")[2, c(1, 3)]), by = g]
+        names(tmp2)[2:3] <- c("pc", "t_val")
+      # }
       tmp2[, split_x := i]
       tmp <- rbind(tmp, tmp2)
+      # tmp[is.nan(t_val), t_val := 0]
     }
 
     dat_reg <- data.table::merge.data.table(data, tmp, by = c("g", "split_x"))
   }
   if(n_folds == 1){
-    tmp <- data[, as.list(lmtest::coeftest(lm(data = .SD, formula = f1), vcov = sandwich::vcovHC, type = "HC3")[2, c(1, 4)]), by = g]
-    names(tmp)[2:3] <- c("pc", "p_val")
+    # tmp <- data[, as.list(lmtest::coeftest(lm(data = .SD, formula = f1), vcov = sandwich::vcovHC, type = "HC3")[2, c(1, 4)]), by = g]
+    # names(tmp)[2:3] <- c("pc", "p_val")
+    tmp <- data[, as.list(lmtest::coeftest(lm(data = .SD, formula = f1), vcov = sandwich::vcovHC, type = "HC3")[2, c(1, 3)]), by = g]
+    names(tmp)[2:3] <- c("pc", "t_val")
     tmp[, split_x := 1]
 
     dat_reg <- data.table::merge.data.table(data, tmp, by = c("g", "split_x"))
@@ -104,12 +114,24 @@ run.late.rest <- function(data, yname,
   f2 <- formula(paste0(yname, " ~ 1 | ", treat, " ~ ", instrument))
 
   if(joint_est == TRUE){
-    reg <- fixest::feols(data = dat_reg[p_val <= p_th], f2, vcov = "hetero")
+    # reg <- fixest::feols(data = dat_reg[p_val <= p_th], f2, vcov = "hetero")
+    if(one_sided_test == TRUE){
+      reg <- fixest::feols(data = dat_reg[t_val >= qnorm(1-p_th)], f2, vcov = "hetero")
+    }
+    if(one_sided_test == FALSE){
+      reg <- fixest::feols(data = dat_reg[abs(t_val) >= qnorm(1-p_th/2)], f2, vcov = "hetero")
+    }
     return(reg)
   }
   if(joint_est == FALSE & csl_est == FALSE){
     coefficient <- NULL
-    reg <- fixest::feols(data = dat_reg[p_val <= p_th], f2, split = ~split_x, vcov = "hetero")
+    # reg <- fixest::feols(data = dat_reg[p_val <= p_th], f2, split = ~split_x, vcov = "hetero")
+    if(one_sided_test == TRUE){
+      reg <- fixest::feols(data = dat_reg[t_val >= qnorm(1-p_th)], f2, split = ~split_x, vcov = "hetero")
+    }
+    if(one_sided_test == FALSE){
+      reg <- fixest::feols(data = dat_reg[abs(t_val) >= qnorm(1-p_th/2)], f2, split = ~split_x, vcov = "hetero")
+    }
     return(setDT(coeftable(reg))[coefficient != "(Intercept)"])
   }
   if(joint_est == FALSE & csl_est == TRUE){

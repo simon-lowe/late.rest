@@ -11,6 +11,7 @@ run.late.rest(
   instrument,
   controls,
   n_folds = 2,
+  one_sided_test = TRUE,
   p_th = 0.05,
   joint_est = TRUE,
   csl_est = FALSE
@@ -28,6 +29,8 @@ run.late.rest(
 \item{controls}{Controls. Either as a formula, eg ~ x1 + x2, or a vector of strings, eg c("x1", "x2")}
 
 \item{n_folds}{Number of folds}
+
+\item{one_sided_test}{Use of a one-sided t-test for selection.}
 
 \item{p_th}{Group selection threshold}
 
