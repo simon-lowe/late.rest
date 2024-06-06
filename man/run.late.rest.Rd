@@ -5,7 +5,7 @@
 \title{Main function}
 \usage{
 run.late.rest(
-  data,
+  dat,
   yname,
   treat,
   instrument,
@@ -18,7 +18,7 @@ run.late.rest(
 )
 }
 \arguments{
-\item{data}{A data.frame containing the necessary variables to run the model.}
+\item{dat}{A data.frame containing the necessary variables to run the model.}
 
 \item{yname}{Name of the dependent variable}
 
@@ -55,7 +55,7 @@ data <- sim.data()
 reg1 <- feols(data = data, y ~ 1 | d ~ z)
 
 # Run the test-and-select method
-reg2 <- run.late.rest(data = data, yname = "y", treat = "d", instrument = "z", controls = ~g)
+reg2 <- run.late.rest(dat = data, yname = "y", treat = "d", instrument = "z", controls = ~g)
 
 # Comparing both regressions
 etable(reg1, reg2)

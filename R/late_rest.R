@@ -7,7 +7,7 @@
 #' @import readr
 #' @importFrom stats lm
 #'
-#' @param data A data.frame containing the necessary variables to run the model.
+#' @param dat A data.frame containing the necessary variables to run the model.
 #' @param yname Name of the dependent variable
 #' @param treat Name of the treatment variable
 #' @param instrument Name of the instrument
@@ -32,18 +32,19 @@
 #' reg1 <- feols(data = data, y ~ 1 | d ~ z)
 #'
 #' # Run the test-and-select method
-#' reg2 <- run.late.rest(data = data, yname = "y", treat = "d", instrument = "z", controls = ~g)
+#' reg2 <- run.late.rest(dat = data, yname = "y", treat = "d", instrument = "z", controls = ~g)
 #'
 #' # Comparing both regressions
 #' etable(reg1, reg2)
 
-run.late.rest <- function(data, yname,
+run.late.rest <- function(dat, yname,
                           treat, instrument, controls,
                           n_folds = 2, one_sided_test = TRUE, p_th = 0.05,
                           joint_est = TRUE, csl_est = FALSE){
 
   # Convert data to data.table
-  data.table::setDT(data)
+  # data.table::setDT(data)
+  data <- as.data.table(dat)
 
   # Load helper function ----------------------------------------------------
   # source("R/utiliy_functions.R")
@@ -77,7 +78,19 @@ run.late.rest <- function(data, yname,
   data[, g := .GRP, by = mget(c_vars)]
 
   # Create the split
-  data[, split_x := rand_n_list_group(.N, n_folds), by = g]
+  repeat_split <- TRUE
+  while(repeat_split == TRUE){
+    data[, split_x := rand_n_list_group(.N, n_folds), by = g]
+
+    z_by_g <- NULL
+    test_split <- data[, list(z_by_g = mean(get(instrument))), by = c("g", "split_x")]
+    if(any(test_split$z_by_g %in% c(0,1))){
+      warning("Had to repeat split because of perfect imbalance.")
+    } else {
+      repeat_split <- FALSE
+    }
+  }
+
 
   # Compute the cross-fitted compliance rates
 
