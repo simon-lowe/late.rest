@@ -99,14 +99,8 @@ run.late.rest <- function(dat, yname,
   if(n_folds > 1){
     tmp <- data.table()
     for(i in 1:n_folds){
-      # if(one_sided_test == FALSE){
-        # tmp2 <- data[, as.list(lmtest::coeftest(lm(data = .SD[split_x != i], formula = f1), vcov = sandwich::vcovHC, type = "HC3")[2, c(1, 4)]), by = g]
-        # names(tmp2)[2:3] <- c("pc", "p_val")
-      # }
-      # if(one_sided_test == TRUE){
-        tmp2 <- data[, as.list(lmtest::coeftest(lm(data = .SD[split_x != i], formula = f1), vcov = sandwich::vcovHC, type = "HC3")[2, c(1, 3)]), by = g]
-        names(tmp2)[2:3] <- c("pc", "t_val")
-      # }
+      tmp2 <- data[, as.list(lmtest::coeftest(lm(data = .SD[split_x != i], formula = f1), vcov = sandwich::vcovHC, type = "HC3")[2, c(1, 3)]), by = g]
+      names(tmp2)[2:3] <- c("pc", "t_val")
       tmp2[, split_x := i]
       tmp <- rbind(tmp, tmp2)
       # tmp[is.nan(t_val), t_val := 0]
@@ -115,8 +109,6 @@ run.late.rest <- function(dat, yname,
     dat_reg <- data.table::merge.data.table(data, tmp, by = c("g", "split_x"))
   }
   if(n_folds == 1){
-    # tmp <- data[, as.list(lmtest::coeftest(lm(data = .SD, formula = f1), vcov = sandwich::vcovHC, type = "HC3")[2, c(1, 4)]), by = g]
-    # names(tmp)[2:3] <- c("pc", "p_val")
     tmp <- data[, as.list(lmtest::coeftest(lm(data = .SD, formula = f1), vcov = sandwich::vcovHC, type = "HC3")[2, c(1, 3)]), by = g]
     names(tmp)[2:3] <- c("pc", "t_val")
     tmp[, split_x := 1]
@@ -127,7 +119,6 @@ run.late.rest <- function(dat, yname,
   f2 <- formula(paste0(yname, " ~ 1 | ", treat, " ~ ", instrument))
 
   if(joint_est == TRUE){
-    # reg <- fixest::feols(data = dat_reg[p_val <= p_th], f2, vcov = "hetero")
     if(one_sided_test == TRUE){
       reg <- fixest::feols(data = dat_reg[t_val >= qnorm(1-p_th)], f2, vcov = "hetero")
     }
@@ -155,6 +146,120 @@ run.late.rest <- function(dat, yname,
     return(reg)
   }
 }
+
+
+#' Create groups from score prediction
+#'
+#' @import data.table
+#' @import grf
+#' @import gtools
+#'
+#' @param dat A data.frame containing the necessary variables to run the model.
+#' @param treat Name of the treatment variable
+#' @param instrument Name of the instrument
+#' @param controls Controls. Either as a formula, eg ~ x1 + x2, or a vector of strings, eg c("x1", "x2")
+#' @param n_groups Number of groups to cut score into
+#' @param pred_method Score prediction method
+#' @param n_folds Number of folds to use for score prediction
+#'
+#' @return data.table
+#' @export
+#'
+#' @examples
+#' # Loading packages
+#' library(fixest)
+#'
+#' # Generate a simulated dataset
+#' data <- sim.data()
+#'
+#' data2 <- create.score.groups(data, treat = "d", instrument = "z", controls = ~x,
+#'                              n_groups = 10)
+#'
+#' # Print summary of predicted compliance scores
+#' summary(data2$pred_p)
+#'
+#' # Run a standard IV
+#' reg1 <- feols(data = data2, y ~ 1 | d ~ z)
+#'
+#' # Run basic test-and-select method
+#' reg2 <- run.late.rest(dat = data2, yname = "y", treat = "d", instrument = "z", controls = ~g)
+#'
+#' # Run basic test-and-select method
+#' reg3 <- run.late.rest(dat = data2, yname = "y", treat = "d", instrument = "z",
+#'                                    controls = ~score_g)
+#'
+#' # Comparing both regressions
+#' etable(reg1, reg2, reg3)
+
+create.score.groups <- function(dat, treat, instrument, controls, n_groups,
+                                pred_method = "Causal_Forest",
+                                n_folds = 2){
+  # Convert data to data.table
+  data <- as.data.table(dat)
+
+  # Load helper function ----------------------------------------------------
+  rand_n_list_group <- function(n, n_groups){
+    rem <- n %% n_groups
+    mult <- n %/% n_groups
+    tmp <- sample(rep(seq(1, n_groups), mult), mult*n_groups, replace = FALSE)
+    return(c(tmp, sample(seq(1, n_groups), rem)))
+  }
+
+  # Parsing -----------------------------------------------------------------
+
+  if(inherits(controls, "character")){
+    model_str <- formula(paste("~-1+", paste(controls, collapse = "+")))
+    cov_list <- controls
+  }
+  if(inherits(controls, "formula")){
+    model_str <- update(controls, ~ -1 + . )
+    cov_list <- all.vars(controls[[2]])
+  }
+
+  # Checks ------------------------------------------------------------------
+
+  # Remove covariates with NAs
+  any_na <- data[, lapply(.SD, function(x) sum(is.na(x))), .SDcols = cov_list]
+
+  if(any(any_na > 0)){
+    warning("Some of the control variables had missing values. Corresponding rows were removed.")
+    data <- data[complete.cases(data[, cov_list, with = FALSE])]
+  }
+  rm(any_na)
+
+
+  # Code --------------------------------------------------------------------
+  split_x = pred_p = score_g = NULL
+
+  # Data split
+  data[, split_x := rand_n_list_group(.N, n_folds)]
+
+  # Cross-fit heterogenous compliance score prediction
+  data[, pred_p := NA_real_]
+  for(i in 1:n_folds){
+    if(pred_method == "Causal_Forest"){
+      pred_model <- causal_forest(
+        model.matrix(model_str, data[split_x != i]),
+        matrix(data[split_x != i][[treat]]),
+        matrix(data[split_x != i][[instrument]])
+      )
+      data[split_x == i, pred_p := predict(pred_model,
+                                           model.matrix(model_str, data[split_x == i]))]
+    } else {
+      stop("Prediction method not recognized.")
+    }
+  }
+
+  # Cut predicted compliance score into n_groups quantiles
+  data[, score_g := quantcut(pred_p, q = n_groups, labels = FALSE)]
+
+  # Delete irrelevant data
+  data[, split_x := NULL]
+
+  # Return data set
+  return(data)
+}
+
 
 #' Simulate data
 #'
