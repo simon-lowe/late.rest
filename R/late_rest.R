@@ -227,6 +227,10 @@ create.score.groups <- function(dat, treat, instrument, controls, n_groups,
   }
   rm(any_na)
 
+  # Checking group size
+  if(nrow(data)/n_groups <= 10){
+    warning("The chosen number of groups will yield groups with less than 10 observations.")
+  }
 
   # Code --------------------------------------------------------------------
   split_x = pred_p = score_g = NULL
@@ -251,7 +255,23 @@ create.score.groups <- function(dat, treat, instrument, controls, n_groups,
   }
 
   # Cut predicted compliance score into n_groups quantiles
-  data[, score_g := quantcut(pred_p, q = n_groups, labels = FALSE)]
+  tryCatch(
+    {
+      data[, score_g := quantcut(pred_p, q = n_groups, labels = FALSE)]
+      tmp <- data[, list(n = .N), by = score_g]
+      tmp <- max(data$n) - min(data$n)
+      if(tmp > 5){
+        warning("Added noise of the order of 2^-30 to break score ties. Consider using less groups.")
+        data[, score_g := quantcut(pred_p + rnorm(.N, 2^-30), q = n_groups, labels = FALSE)]
+      }
+      rm(tmp)
+    },
+    error = function(cond){
+      warning("Added noise of the order of 2^-30 to break score ties. Consider using less groups.")
+      data[, score_g := quantcut(pred_p + rnorm(.N, 2^-30), q = n_groups, labels = FALSE)]
+    }
+  )
+
 
   # Delete irrelevant data
   data[, split_x := NULL]
