@@ -262,13 +262,13 @@ create.score.groups <- function(dat, treat, instrument, controls, n_groups,
       tmp <- max(tmp$n) - min(tmp$n)
       if(tmp > 5){
         warning("Added noise of the order of 2^-30 to break score ties. Consider using less groups.")
-        data[, score_g := quantcut(pred_p + rnorm(.N, 2^-30), q = n_groups, labels = FALSE)]
+        data[, score_g := quantcut(pred_p + rnorm(.N, 0, 2^-30), q = n_groups, labels = FALSE)]
       }
       rm(tmp)
     },
     error = function(cond){
       warning("Added noise of the order of 2^-30 to break score ties. Consider using less groups.")
-      data[, score_g := quantcut(pred_p + rnorm(.N, 2^-30), q = n_groups, labels = FALSE)]
+      data[, score_g := quantcut(pred_p + rnorm(.N, 0, 2^-30), q = n_groups, labels = FALSE)]
     }
   )
 
