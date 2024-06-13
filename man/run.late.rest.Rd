@@ -5,7 +5,7 @@
 \title{Main function}
 \usage{
 run.late.rest(
-  dat,
+  data,
   yname,
   treat,
   instrument,
@@ -18,7 +18,7 @@ run.late.rest(
 )
 }
 \arguments{
-\item{dat}{A data.frame containing the necessary variables to run the model.}
+\item{data}{A data.frame containing the necessary variables to run the model.}
 
 \item{yname}{Name of the dependent variable}
 

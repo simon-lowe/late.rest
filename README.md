@@ -25,31 +25,78 @@ devtools::install_github("simon-lowe/late.rest")
 The example below shows basic use with simulated data:
 
 ``` r
-library(late.rest)
+# Loading packages
 library(fixest)
 #> Warning: package 'fixest' was built under R version 4.2.3
+library(late.rest)
 
 # Generate a simulated dataset
 data <- sim.data()
 
-# Run a standard IV
-reg1 <- feols(data = data, y ~ 1 | d ~ z)
+# Create a predicted compliance score
+data2 <- create.score.groups(data, treat = "d", instrument = "z", controls = ~x,
+                             n_groups = 10)
+#> Warning in doTryCatch(return(expr), name, parentenv, handler): Added noise of
+#> the order of 2^-30 to break score ties. Consider using less groups.
 
-# Run the test-and-select method
-reg2 <- run.late.rest(data = data, yname = "y", treat = "d", instrument = "z", controls = ~g)
+# Print summary of predicted compliance scores
+summary(data2$pred_p)
+#>       Min.    1st Qu.     Median       Mean    3rd Qu.       Max. 
+#> -0.0030744  0.0000027  0.0021427  0.2568039  0.7540144  1.0008231
+
+# Run a standard IV
+reg1 <- feols(data = data2, y ~ 1 | d ~ z)
+
+# Run basic test-and-select method
+reg2 <- run.late.rest(data = data2, yname = "y", treat = "d", instrument = "z", controls = ~g)
+#> Warning in summary.lm(x): essentially perfect fit: summary may be unreliable
+#> Warning in summary.lm(x): essentially perfect fit: summary may be unreliable
+
+#> Warning in summary.lm(x): essentially perfect fit: summary may be unreliable
+
+#> Warning in summary.lm(x): essentially perfect fit: summary may be unreliable
+
+#> Warning in summary.lm(x): essentially perfect fit: summary may be unreliable
+
+#> Warning in summary.lm(x): essentially perfect fit: summary may be unreliable
+
+#> Warning in summary.lm(x): essentially perfect fit: summary may be unreliable
+
+#> Warning in summary.lm(x): essentially perfect fit: summary may be unreliable
+
+#> Warning in summary.lm(x): essentially perfect fit: summary may be unreliable
+
+#> Warning in summary.lm(x): essentially perfect fit: summary may be unreliable
+
+# Run basic test-and-select method
+reg3 <- run.late.rest(data = data2, yname = "y", treat = "d", instrument = "z",
+                                   controls = ~score_g)
+#> Warning in summary.lm(x): essentially perfect fit: summary may be unreliable
+
+#> Warning in summary.lm(x): essentially perfect fit: summary may be unreliable
+
+#> Warning in summary.lm(x): essentially perfect fit: summary may be unreliable
+
+#> Warning in summary.lm(x): essentially perfect fit: summary may be unreliable
+
+#> Warning in summary.lm(x): essentially perfect fit: summary may be unreliable
+
+#> Warning in summary.lm(x): essentially perfect fit: summary may be unreliable
+
+#> Warning in summary.lm(x): essentially perfect fit: summary may be unreliable
 
 # Comparing both regressions
-etable(reg1, reg2)
-#>                              reg1             reg2
-#> Dependent Var.:                 y                y
-#>                                                   
-#> Constant        -0.3063. (0.1706) -0.0512 (0.0916)
-#> d                0.6120. (0.3325) 0.3218* (0.1556)
-#> _______________ _________________ ________________
-#> S.E. type                     IID              IID
-#> Observations                1,000              400
-#> R2                       -0.22735         -0.01044
-#> Adj. R2                  -0.22858         -0.01298
+etable(reg1, reg2, reg3)
+#>                             reg1             reg2             reg3
+#> Dependent Var.:                y                y                y
+#>                                                                   
+#> Constant        -0.2347 (0.1778) -0.0296 (0.0798) -0.0878 (0.0848)
+#> d                0.3507 (0.3369)  0.1318 (0.1400)  0.2090 (0.1327)
+#> _______________ ________________ ________________ ________________
+#> S.E. type                    IID Heterosked.-rob. Heterosked.-rob.
+#> Observations               1,000              300              300
+#> R2                      -0.10588          0.00632          0.00399
+#> Adj. R2                 -0.10699          0.00299          0.00065
 #> ---
 #> Signif. codes: 0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
 ```

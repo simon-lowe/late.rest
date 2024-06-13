@@ -34,20 +34,32 @@ devtools::install_github("simon-lowe/late.rest")
 The example below shows basic use with simulated data:
 
 ```{r example}
-library(late.rest)
+# Loading packages
 library(fixest)
+library(late.rest)
 
 # Generate a simulated dataset
 data <- sim.data()
 
-# Run a standard IV
-reg1 <- feols(data = data, y ~ 1 | d ~ z)
+# Create a predicted compliance score
+data2 <- create.score.groups(data, treat = "d", instrument = "z", controls = ~x,
+                             n_groups = 10)
 
-# Run the test-and-select method
-reg2 <- run.late.rest(data = data, yname = "y", treat = "d", instrument = "z", controls = ~g)
+# Print summary of predicted compliance scores
+summary(data2$pred_p)
+
+# Run a standard IV
+reg1 <- feols(data = data2, y ~ 1 | d ~ z)
+
+# Run basic test-and-select method
+reg2 <- run.late.rest(data = data2, yname = "y", treat = "d", instrument = "z", controls = ~g)
+
+# Run basic test-and-select method
+reg3 <- run.late.rest(data = data2, yname = "y", treat = "d", instrument = "z",
+                                   controls = ~score_g)
 
 # Comparing both regressions
-etable(reg1, reg2)
+etable(reg1, reg2, reg3)
 ```
 
 

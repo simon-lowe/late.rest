@@ -5,7 +5,7 @@
 \title{Create groups from score prediction}
 \usage{
 create.score.groups(
-  dat,
+  data,
   treat,
   instrument,
   controls,
@@ -15,7 +15,7 @@ create.score.groups(
 )
 }
 \arguments{
-\item{dat}{A data.frame containing the necessary variables to run the model.}
+\item{data}{A data.frame containing the necessary variables to run the model.}
 
 \item{treat}{Name of the treatment variable}
 
@@ -52,10 +52,10 @@ summary(data2$pred_p)
 reg1 <- feols(data = data2, y ~ 1 | d ~ z)
 
 # Run basic test-and-select method
-reg2 <- run.late.rest(dat = data2, yname = "y", treat = "d", instrument = "z", controls = ~g)
+reg2 <- run.late.rest(data = data2, yname = "y", treat = "d", instrument = "z", controls = ~g)
 
 # Run basic test-and-select method
-reg3 <- run.late.rest(dat = data2, yname = "y", treat = "d", instrument = "z",
+reg3 <- run.late.rest(data = data2, yname = "y", treat = "d", instrument = "z",
                                    controls = ~score_g)
 
 # Comparing both regressions
