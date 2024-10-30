@@ -17,6 +17,7 @@
 #' @param p_th Group selection threshold
 #' @param joint_est Final estimation method
 #' @param csl_est CS method
+#' @param inter_drop "Dropping" through interactions
 #'
 #' @return fixest object
 #' @export
@@ -40,7 +41,8 @@
 run.late.rest <- function(data, yname,
                           treat, instrument, controls,
                           n_folds = 2, one_sided_test = TRUE, p_th = 0.05,
-                          joint_est = TRUE, csl_est = FALSE){
+                          joint_est = TRUE, csl_est = FALSE,
+                          inter_drop = FALSE){
 
   # Convert data to data.table
   # data.table::setDT(data)
@@ -73,6 +75,7 @@ run.late.rest <- function(data, yname,
   # Code --------------------------------------------------------------------
   # Creating variables for the R check
   g = p_val = t_val = res = split_x = val = NULL
+  keep_g = NULL
 
   # Create the group variable
   dat[, g := .GRP, by = mget(c_vars)]
@@ -127,7 +130,8 @@ run.late.rest <- function(data, yname,
     }
     return(reg)
   }
-  if(joint_est == FALSE & csl_est == FALSE){
+  # if(joint_est == FALSE & csl_est == FALSE){
+  if(joint_est == FALSE & csl_est == FALSE & inter_drop == FALSE){
     coefficient <- NULL
     # reg <- fixest::feols(data = dat_reg[p_val <= p_th], f2, split = ~split_x, vcov = "hetero")
     if(one_sided_test == TRUE){
@@ -143,6 +147,14 @@ run.late.rest <- function(data, yname,
     dat_reg[, z_dm := get(instrument) - mean(get(instrument))]
     f3 <- formula(paste0(yname, " ~ pc | ", treat, " ~ z_dm:pc"))
     reg <- fixest::feols(data = dat_reg, f3, vcov = "hetero")
+    return(reg)
+  }
+  if(joint_est == FALSE & inter_drop == TRUE){
+    z_dm <- NULL
+    dat_reg[, z_dm := get(instrument) - mean(get(instrument))]
+    dat_reg[, keep_g := ifelse(is.nan(t_val), FALSE, t_val >= qnorm(1-p_th))]
+    f4 <- formula(paste0(yname, " ~ keep_g | ", treat, " ~ z_dm:keep_g"))
+    reg <- fixest::feols(data = dat_reg, f4, vcov = "hetero")
     return(reg)
   }
 }

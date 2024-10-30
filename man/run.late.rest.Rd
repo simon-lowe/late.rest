@@ -14,7 +14,8 @@ run.late.rest(
   one_sided_test = TRUE,
   p_th = 0.05,
   joint_est = TRUE,
-  csl_est = FALSE
+  csl_est = FALSE,
+  inter_drop = FALSE
 )
 }
 \arguments{
@@ -37,6 +38,8 @@ run.late.rest(
 \item{joint_est}{Final estimation method}
 
 \item{csl_est}{CS method}
+
+\item{inter_drop}{"Dropping" through interactions}
 }
 \value{
 fixest object
