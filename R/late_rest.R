@@ -293,6 +293,198 @@ create.score.groups <- function(data, treat, instrument, controls, n_groups,
 }
 
 
+#' D-LATE estimation with cross-fitted score estimation
+#'
+#' @import fixest
+#' @import data.table
+#' @import lmtest
+#' @import sandwich
+#' @import grf
+#' @importFrom stats lm quantile qnorm
+#'
+#' @param data A data.frame containing the necessary variables to run the model.
+#' @param yname Name of the dependent variable (character string)
+#' @param treat Name of the treatment variable (character string)
+#' @param instrument Name of the instrument (character string)
+#' @param controls Controls. Either as a formula, eg ~ x1 + x2, or a vector of strings, eg c("x1", "x2")
+#' @param n_groups Number of groups to split the predicted compliance scores into (default = 10)
+#' @param pred_method Method for predicting compliance scores. Currently only "Causal_Forest" is supported
+#' @param p_th Group selection threshold for the t-test (default = 0.05)
+#'
+#' @details
+#' This function implements the D-LATE estimator with the following steps:
+#' 1. Splits the data into 3 folds
+#' 2. For each combination of folds:
+#'    - Uses one fold to predict compliance scores and determine group thresholds
+#'    - Uses the second fold to compute first-stage t-statistics for each group
+#'    - Assigns these t-statistics to observations in the third fold
+#' 3. Performs final IV estimation using group selection based on t-statistics
+#'
+#' @return A fixest object containing the IV regression results
+#' @export
+#'
+#' @examples
+#' # Loading required packages
+#' library(fixest)
+#' library(grf)
+#'
+#' # Generate a simulated dataset
+#' data <- sim.data()
+#'
+#' # Run standard IV
+#' reg1 <- feols(data = data, y ~ 1 | d ~ z)
+#'
+#' # Run D-LATE
+#' reg2 <- dlate_method(data = data,
+#'                     yname = "y",
+#'                     treat = "d",
+#'                     instrument = "z",
+#'                     controls = ~x)
+#'
+#' # Compare results
+#' etable(reg1, reg2)
+
+dlate_method <- function(data, yname, treat, instrument, controls,
+                             n_groups = 10, pred_method = "Causal_Forest",
+                             p_th = 0.05) {
+  # Input checks
+  if (!inherits(data, "data.frame")) {
+    stop("'data' must be a data.frame or data.table")
+  }
+  if (!is.character(yname) || length(yname) != 1) {
+    stop("'yname' must be a single character string")
+  }
+  if (!is.character(treat) || length(treat) != 1) {
+    stop("'treat' must be a single character string")
+  }
+  if (!is.character(instrument) || length(instrument) != 1) {
+    stop("'instrument' must be a single character string")
+  }
+  if (!(inherits(controls, "formula") || inherits(controls, "character"))) {
+    stop("'controls' must be either a formula or character vector")
+  }
+
+  # Convert data to data.table
+  dat <- as.data.table(data)
+
+  # Variables for R check
+  split_x = pred_p = score_g = t_val = z_dm = keep_g = NULL
+
+  # Initialize prediction column
+  dat[, split_x := NA_integer_]
+  dat[, pred_p := NA_real_]
+  dat[, score_g := NA_integer_]
+  dat[, t_val := NA_real_]
+
+  # Parse controls
+  if(inherits(controls, "character")) {
+    model_str <- formula(paste("~-1+", paste(controls, collapse = "+")))
+    cov_list <- controls
+  }
+  if(inherits(controls, "formula")) {
+    model_str <- update(controls, ~ -1 + . )
+    cov_list <- all.vars(controls[[2]])
+  }
+
+  # Check for and handle NAs
+  any_na <- dat[, lapply(.SD, function(x) sum(is.na(x))),
+                .SDcols = c(yname, treat, instrument, cov_list)]
+
+  if(any(unlist(any_na) > 0)) {
+    warning("Some variables had missing values. Corresponding rows were removed.")
+    dat <- dat[complete.cases(dat[, c(yname, treat, instrument, cov_list), with = FALSE])]
+  }
+
+  # Check group size
+  if(nrow(dat)/n_groups <= 10) {
+    warning("The chosen number of groups will yield groups with less than 10 observations.")
+  }
+
+  # Create helper function for random splits
+  rand_n_list_group <- function(n, n_groups) {
+    rem <- n %% n_groups
+    mult <- n %/% n_groups
+    tmp <- sample(rep(seq(1, n_groups), mult), mult*n_groups, replace = FALSE)
+    return(c(tmp, sample(seq(1, n_groups), rem)))
+  }
+
+  # Create three folds
+  dat[, split_x := rand_n_list_group(.N, 3)]
+
+  # Function to get quantile thresholds
+  get_quantile_thresholds <- function(x, n_groups) {
+    probs <- seq(0, 1, length.out = n_groups + 1)
+    unique(quantile(x, probs = probs, type = 1))
+  }
+
+  # For each combination of folds
+  fold_combos <- list(
+    list(pred = 1, fs = 2, final = 3),
+    list(pred = 2, fs = 3, final = 1),
+    list(pred = 3, fs = 1, final = 2)
+  )
+
+  for(combo in fold_combos) {
+    # Predict first stage in prediction fold
+    if(pred_method == "Causal_Forest") {
+      pred_model <- causal_forest(
+        model.matrix(model_str, dat[split_x == combo$pred]),
+        matrix(dat[split_x == combo$pred][[treat]]),
+        matrix(dat[split_x == combo$pred][[instrument]])
+      )
+
+      # Get thresholds from prediction fold
+      pred_fold_preds <- predict(pred_model,
+                                 model.matrix(model_str, dat[split_x == combo$pred]))$predictions
+      thresholds <- get_quantile_thresholds(pred_fold_preds, n_groups)
+
+      # Check if we have fewer unique thresholds than requested groups
+      n_actual_groups <- length(thresholds) - 1
+      if(n_actual_groups < n_groups) {
+        warning("Due to ties in predictions, only ", n_actual_groups,
+                " distinct groups can be created instead of the requested ", n_groups, " groups")
+      }
+
+      # Apply to other folds
+      for(fold in c(combo$fs, combo$final)) {
+        fold_preds <- predict(pred_model,
+                              model.matrix(model_str, dat[split_x == fold]))
+        dat[split_x == fold, pred_p := fold_preds]
+        dat[split_x == fold, score_g := cut(pred_p,
+                                            breaks = thresholds,
+                                            labels = FALSE,
+                                            include.lowest = TRUE)]
+      }
+    } else {
+      stop("Prediction method not recognized.")
+    }
+
+    # Compute first-stage t-values in FS fold and save for final fold
+    f1 <- formula(paste0(treat, " ~ ", instrument))
+    t_vals <- dat[split_x == combo$fs,
+                  as.list(lmtest::coeftest(
+                    lm(data = .SD, formula = f1),
+                    vcov = sandwich::vcovHC,
+                    type = "HC3")[2, c(1, 3)]),
+                  by = score_g]
+    names(t_vals)[2:3] <- c("pc", "t_val")
+
+    # Merge t-values to final fold
+    dat[split_x == combo$final, t_val := t_vals[.SD, on = "score_g"]$t_val]
+  }
+
+  # Prepare final regression
+  dat[, z_dm := get(instrument) - mean(get(instrument))]
+  dat[, keep_g := ifelse(is.nan(t_val), FALSE, t_val >= qnorm(1-p_th))]
+
+  # Run final regression
+  f4 <- formula(paste0(yname, " ~ keep_g | ", treat, " ~ z_dm:keep_g"))
+  reg <- fixest::feols(data = dat, f4, vcov = "hetero")
+
+  return(reg)
+}
+
+
 #' Simulate data
 #'
 #' @import data.table
