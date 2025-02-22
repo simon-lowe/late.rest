@@ -12,7 +12,9 @@ dlate_method(
   controls,
   n_groups = 10,
   pred_method = "Causal_Forest",
-  p_th = 0.05
+  p_th = 0.05,
+  max_tries = 3,
+  verbose = FALSE
 )
 }
 \arguments{
@@ -31,6 +33,10 @@ dlate_method(
 \item{pred_method}{Method for predicting compliance scores. Currently only "Causal_Forest" is supported}
 
 \item{p_th}{Group selection threshold for the t-test (default = 0.05)}
+
+\item{max_tries}{Maximum number of attempts to create a valid split with sufficient instrument variation (default = 3)}
+
+\item{verbose}{Logical indicating whether to show warnings from t-statistic computations (default = FALSE)}
 }
 \value{
 A fixest object containing the IV regression results
