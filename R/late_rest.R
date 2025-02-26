@@ -312,6 +312,7 @@ create.score.groups <- function(data, treat, instrument, controls, n_groups,
 #' @param p_th Group selection threshold for the t-test (default = 0.05)
 #' @param max_tries Maximum number of attempts to create a valid split with sufficient instrument variation (default = 3)
 #' @param verbose Logical indicating whether to show warnings from t-statistic computations (default = FALSE)
+#' @param weighted Logical indicating whether to use weighted IV rather than interacted IV (default = FALSE)
 #'
 #' @details
 #' This function implements the D-LATE estimator with the following steps:
@@ -348,7 +349,8 @@ create.score.groups <- function(data, treat, instrument, controls, n_groups,
 
 dlate_method <- function(data, yname, treat, instrument, controls,
                              n_groups = 10, pred_method = "Causal_Forest",
-                             p_th = 0.05, max_tries = 3, verbose = FALSE) {
+                             p_th = 0.05, max_tries = 3, verbose = FALSE,
+                         weighted = FALSE) {
   # Input checks
   if (!inherits(data, "data.frame")) {
     stop("'data' must be a data.frame or data.table")
@@ -473,15 +475,6 @@ dlate_method <- function(data, yname, treat, instrument, controls,
         # Compute first-stage t-values in FS fold and save for final fold
         # f1 <- formula(paste0(treat, " ~ ", instrument))
         if (!verbose) {
-          # Suppress warnings for t-value computation
-          # t_vals <- suppressWarnings(
-          #   dat[split_x == combo$fs,
-          #       as.list(lmtest::coeftest(
-          #         lm(data = .SD, formula = f1),
-          #         vcov = sandwich::vcovHC,
-          #         type = "HC3")[2, c(1, 3)]),
-          #       by = score_g]
-          # )
           t_vals <- suppressWarnings(
             dat[split_x == combo$fs,
                         as.list(lmtest::coeftest(
@@ -527,8 +520,14 @@ dlate_method <- function(data, yname, treat, instrument, controls,
   dat[, keep_g := ifelse(is.nan(t_val), FALSE, t_val >= qnorm(1-p_th))]
 
   # Run final regression
-  f4 <- formula(paste0(yname, " ~ keep_g | ", treat, " ~ z_dm:keep_g"))
-  reg <- fixest::feols(data = dat, f4, vcov = "hetero")
+  if(weighted == FALSE){
+    f4 <- formula(paste0(yname, " ~ keep_g | ", treat, " ~ z_dm:keep_g"))
+    reg <- fixest::feols(data = dat, f4, vcov = "hetero")
+  }
+  if(weighted == TRUE){
+    f4 <- formula(paste0(yname, " ~ 1 | ", treat, " ~ z"))
+    reg <- fixest::feols(data = dat, f4, vcov = "hetero", weights = ~keep_g)
+  }
 
   return(reg)
 }

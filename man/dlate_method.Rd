@@ -14,7 +14,8 @@ dlate_method(
   pred_method = "Causal_Forest",
   p_th = 0.05,
   max_tries = 3,
-  verbose = FALSE
+  verbose = FALSE,
+  weighted = FALSE
 )
 }
 \arguments{
@@ -37,6 +38,8 @@ dlate_method(
 \item{max_tries}{Maximum number of attempts to create a valid split with sufficient instrument variation (default = 3)}
 
 \item{verbose}{Logical indicating whether to show warnings from t-statistic computations (default = FALSE)}
+
+\item{weighted}{Logical indicating whether to use weighted IV rather than interacted IV (default = FALSE)}
 }
 \value{
 A fixest object containing the IV regression results
