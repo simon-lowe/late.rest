@@ -319,7 +319,7 @@ create.score.groups <- function(data, treat, instrument, controls, n_groups,
 #' @param p_th Group selection threshold for the t-test (default = 0.05)
 #' @param max_tries Maximum number of attempts to create a valid split with sufficient instrument variation (default = 3)
 #' @param verbose Logical indicating whether to show warnings from t-statistic computations (default = FALSE)
-#' @param weighted Logical indicating whether to use weighted IV rather than interacted IV (default = FALSE)
+#' @param iv_type Type of IV estimation to use. Options are "base" (default), "weighted", and "saturated"
 #'
 #' @details
 #' This function implements the D-LATE estimator with the following steps:
@@ -357,7 +357,7 @@ create.score.groups <- function(data, treat, instrument, controls, n_groups,
 dlate_method <- function(data, yname, treat, instrument, controls,
                              n_groups = 10, pred_method = "Causal_Forest",
                              p_th = 0.05, max_tries = 3, verbose = FALSE,
-                         weighted = FALSE) {
+                         iv_type = "base") {
   # Input checks
   if (!inherits(data, "data.frame")) {
     stop("'data' must be a data.frame or data.table")
@@ -529,15 +529,22 @@ dlate_method <- function(data, yname, treat, instrument, controls,
   int_zdm_keep_g <- NULL
   dat[, int_zdm_keep_g := z_dm * keep_g]
 
+
   # Run final regression
-  if(weighted == FALSE){
+  if(iv_type == "base"){
     # f4 <- formula(paste0(yname, " ~ keep_g | ", treat, " ~ z_dm:keep_g"))
     f4 <- formula(paste0(yname, " ~ keep_g | ", treat, " ~ int_zdm_keep_g"))
     reg <- fixest::feols(data = dat, f4, vcov = "hetero")
-  }
-  if(weighted == TRUE){
+  } else if(iv_type == "weighted"){
     f4 <- formula(paste0(yname, " ~ 1 | ", treat, " ~ z"))
     reg <- fixest::feols(data = dat, f4, vcov = "hetero", weights = ~keep_g)
+  } else if(iv_type == "saturated"){
+    int_zdm_mkeep_g <- NULL
+    dat[, int_zdm_mkeep_g := z_dm * (1-keep_g)]
+    f4 <- formula(paste0(yname, " ~ keep_g | ", treat, " ~ int_zdm_keep_g + int_zdm_mkeep_g"))
+    reg <- fixest::feols(data = dat, f4, vcov = "hetero")
+  } else {
+    stop("Invalid IV type")
   }
 
   return(reg)

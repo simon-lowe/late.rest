@@ -15,7 +15,7 @@ dlate_method(
   p_th = 0.05,
   max_tries = 3,
   verbose = FALSE,
-  weighted = FALSE
+  iv_type = "base"
 )
 }
 \arguments{
@@ -39,7 +39,7 @@ dlate_method(
 
 \item{verbose}{Logical indicating whether to show warnings from t-statistic computations (default = FALSE)}
 
-\item{weighted}{Logical indicating whether to use weighted IV rather than interacted IV (default = FALSE)}
+\item{iv_type}{Type of IV estimation to use. Options are "base" (default), "weighted", and "saturated"}
 }
 \value{
 A fixest object containing the IV regression results
