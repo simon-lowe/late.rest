@@ -144,16 +144,23 @@ run.late.rest <- function(data, yname,
   }
   if(joint_est == FALSE & csl_est == TRUE){
     z_dm <- NULL
+    pc <- NULL
+    int_z_dm_pc <- NULL
     dat_reg[, z_dm := get(instrument) - mean(get(instrument))]
-    f3 <- formula(paste0(yname, " ~ pc | ", treat, " ~ z_dm:pc"))
+    dat_reg[, int_z_dm_pc := z_dm * pc]
+    # f3 <- formula(paste0(yname, " ~ pc | ", treat, " ~ z_dm:pc"))
+    f3 <- formula(paste0(yname, " ~ pc | ", treat, " ~ int_z_dm_pc"))
     reg <- fixest::feols(data = dat_reg, f3, vcov = "hetero")
     return(reg)
   }
   if(joint_est == FALSE & inter_drop == TRUE){
     z_dm <- NULL
+    int_z_dm_keep_g <- NULL
     dat_reg[, z_dm := get(instrument) - mean(get(instrument))]
     dat_reg[, keep_g := ifelse(is.nan(t_val), FALSE, t_val >= qnorm(1-p_th))]
-    f4 <- formula(paste0(yname, " ~ keep_g | ", treat, " ~ z_dm:keep_g"))
+    dat_reg[, int_z_dm_keep_g := z_dm * keep_g]
+    # f4 <- formula(paste0(yname, " ~ keep_g | ", treat, " ~ z_dm:keep_g"))
+    f4 <- formula(paste0(yname, " ~ keep_g | ", treat, " ~ int_z_dm_keep_g"))
     reg <- fixest::feols(data = dat_reg, f4, vcov = "hetero")
     return(reg)
   }
@@ -517,11 +524,15 @@ dlate_method <- function(data, yname, treat, instrument, controls,
 
   # Prepare final regression
   dat[, z_dm := .SD[[1]] - mean(.SD[[1]]), .SDcols = instrument]
-  dat[, keep_g := ifelse(is.nan(t_val), FALSE, t_val >= qnorm(1-p_th))]
+  # dat[, keep_g := ifelse(is.nan(t_val), FALSE, t_val >= qnorm(1-p_th))]
+  dat[, keep_g := as.numeric(ifelse(is.nan(t_val), FALSE, t_val >= qnorm(1-p_th)))]
+  int_zdm_keep_g <- NULL
+  dat[, int_zdm_keep_g := z_dm * keep_g]
 
   # Run final regression
   if(weighted == FALSE){
-    f4 <- formula(paste0(yname, " ~ keep_g | ", treat, " ~ z_dm:keep_g"))
+    # f4 <- formula(paste0(yname, " ~ keep_g | ", treat, " ~ z_dm:keep_g"))
+    f4 <- formula(paste0(yname, " ~ keep_g | ", treat, " ~ int_zdm_keep_g"))
     reg <- fixest::feols(data = dat, f4, vcov = "hetero")
   }
   if(weighted == TRUE){
